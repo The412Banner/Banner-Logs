@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.isActive
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
 import kotlin.coroutines.coroutineContext
 
@@ -40,25 +41,29 @@ object LogcatReader {
         }
     }.flowOn(Dispatchers.IO)
 
-    suspend fun getPidMap(): Map<Int, String> {
-        return try {
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "ps -A -o PID,NAME"))
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val map = mutableMapOf<Int, String>()
-            reader.useLines { lines ->
-                lines.drop(1).forEach { line ->
-                    val parts = line.trim().split(Regex("\\s+"), 2)
-                    if (parts.size == 2) {
-                        val pid = parts[0].toIntOrNull() ?: return@forEach
-                        map[pid] = parts[1]
-                    }
-                }
+    /**
+     * Reads /proc/<pid>/cmdline directly — world-readable on Android, no root needed.
+     * This avoids spawning a new `su` process on every refresh (which triggers SU popups).
+     */
+    fun getPidMap(): Map<Int, String> {
+        val map = mutableMapOf<Int, String>()
+        try {
+            File("/proc").listFiles { f ->
+                f.isDirectory && f.name.all { it.isDigit() }
+            }?.forEach { pidDir ->
+                val pid = pidDir.name.toIntOrNull() ?: return@forEach
+                val cmdlineFile = File(pidDir, "cmdline")
+                if (!cmdlineFile.canRead()) return@forEach
+                val raw = cmdlineFile.readBytes()
+                // cmdline is null-delimited; first segment is the process/package name
+                val name = raw.takeWhile { it != 0.toByte() }
+                    .toByteArray()
+                    .decodeToString()
+                    .trim()
+                if (name.isNotEmpty()) map[pid] = name
             }
-            process.waitFor()
-            map
-        } catch (_: Exception) {
-            emptyMap()
-        }
+        } catch (_: Exception) {}
+        return map
     }
 
     suspend fun checkRoot(): Boolean {

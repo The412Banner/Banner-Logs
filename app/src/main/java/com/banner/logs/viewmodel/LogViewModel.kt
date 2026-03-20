@@ -3,7 +3,6 @@ package com.banner.logs.viewmodel
 import android.app.Application
 import android.content.ContentValues
 import android.os.Build
-import android.os.Environment
 import android.provider.MediaStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -37,6 +36,7 @@ data class UiState(
     val isRunning: Boolean = false,
     val isPaused: Boolean = false,
     val filterState: FilterState = FilterState(),
+    /** 0 = unlimited */
     val maxLines: Int = 2000,
     val fontSize: Float = 12f,
     val autoScroll: Boolean = true,
@@ -95,7 +95,10 @@ class LogViewModel(application: Application) : AndroidViewModel(application) {
                 entriesMutex.withLock {
                     allEntries.addLast(entry)
                     val max = _uiState.value.maxLines
-                    while (allEntries.size > max) allEntries.removeFirst()
+                    if (max > 0) {
+                        while (allEntries.size > max) allEntries.removeFirst()
+                    }
+                    // max == 0 means unlimited — no trimming
                 }
                 dirty.set(true)
             }
@@ -115,9 +118,7 @@ class LogViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(isRunning = false, isPaused = true) }
     }
 
-    fun resume() {
-        start()
-    }
+    fun resume() { start() }
 
     fun clearLogs() {
         viewModelScope.launch {
@@ -168,7 +169,7 @@ class LogViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val sdf = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US)
-                val fileName = "banner-logs-${sdf.format(Date())}.txt"
+                val fileName = "logcat-${sdf.format(Date())}.txt"
                 val content = entriesMutex.withLock { allEntries.joinToString("\n") { it.raw } }
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -211,11 +212,14 @@ class LogViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun refreshPidMap() {
+    private fun refreshPidMap() {
+        // getPidMap() reads /proc directly — no su needed, no SU popup
         val map = LogcatReader.getPidMap()
-        pidsMutex.withLock {
-            pidMap.clear()
-            pidMap.putAll(map)
+        viewModelScope.launch {
+            pidsMutex.withLock {
+                pidMap.clear()
+                pidMap.putAll(map)
+            }
         }
     }
 
@@ -227,7 +231,7 @@ class LogViewModel(application: Application) : AndroidViewModel(application) {
         val filtered = if (filter.searchText.isEmpty() &&
             filter.packageFilter.isEmpty() &&
             filter.enabledLevels.size == (LogLevel.entries.size - 1)) {
-            snapshot // fast path: no filters active
+            snapshot
         } else {
             snapshot.filter { entry ->
                 entry.level in filter.enabledLevels &&

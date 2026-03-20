@@ -1,6 +1,8 @@
 package com.banner.logs.ui.screen
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -14,6 +16,10 @@ import androidx.compose.ui.unit.dp
 import com.banner.logs.viewmodel.LogViewModel
 import com.banner.logs.viewmodel.UiState
 import kotlin.math.roundToInt
+
+private val MAX_LINE_OPTIONS = listOf(500, 1000, 2000, 5000, 10000, 20000, 0)
+
+private fun maxLineLabel(n: Int) = if (n == 0) "∞" else n.toString()
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,21 +82,25 @@ fun SettingsSheet(
             // --- Buffer ---
             SectionLabel("Log Buffer")
             Text(
-                text = "Max lines held in memory",
+                text = "Max lines held in memory  —  ∞ = unlimited (uses more RAM)",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(6.dp))
-            Row(
+            LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
+                contentPadding = PaddingValues(end = 4.dp)
             ) {
-                listOf(500, 1000, 2000, 5000).forEach { n ->
+                items(MAX_LINE_OPTIONS) { n ->
                     FilterChip(
                         selected = uiState.maxLines == n,
                         onClick = { viewModel.setMaxLines(n) },
-                        label = { Text(n.toString()) },
-                        modifier = Modifier.weight(1f)
+                        label = {
+                            Text(
+                                text = maxLineLabel(n),
+                                fontWeight = if (uiState.maxLines == n) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
                     )
                 }
             }
