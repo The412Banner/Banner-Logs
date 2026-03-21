@@ -1,6 +1,6 @@
 # Simple Logcat
 
-A professional root logcat reader for Android. Real-time log streaming with color-coded log levels, package filtering with optional persistence, text search, and export to Downloads.
+A professional root logcat reader for Android. Real-time log streaming with color-coded log levels, package filtering with saved presets, live file output for terminal tools, and export to internal storage.
 
 ## Requirements
 
@@ -14,10 +14,13 @@ A professional root logcat reader for Android. Real-time log streaming with colo
 - **Level filter chips** — toggle any log level on/off
 - **Text search** — filter by tag or message content
 - **Package name filter** — resolves PIDs to package names via `/proc/<pid>/cmdline` (no extra root popups)
-- **Save package filter** — bookmark icon next to the filter field persists your filter across launches
-- **Stack trace support** — continuation lines (exceptions, stack frames) are preserved
-- **Export** — saves all buffered logs to `Downloads/logcat-<timestamp>.txt`
-- **Settings**: font size, max buffer lines (500 / 1000 / 2000 / 5000 / 10000 / 20000 / ∞), auto-scroll, timestamp/PID display, line wrap
+- **Saved package filter list** — bookmark any package name filter; saved entries appear as chips below the field for one-tap apply or removal; persists across restarts
+- **Live file mode** — tap the record button (●) to stream filtered logs to a file in real time; a foreground service keeps capture running while the app is minimised. Read from Termux or any terminal:
+  ```
+  tail -f /sdcard/Android/data/com.banner.logs/files/simple-logcat-live.log
+  ```
+- **Export** — saves all buffered logs to `/sdcard/logcat-<timestamp>.txt`
+- **Settings**: font size, max buffer lines (500 / 1k / 2k / 5k / 10k / 20k / ∞, default ∞), auto-scroll, timestamp/PID display, line wrap
 
 ## Signing
 
