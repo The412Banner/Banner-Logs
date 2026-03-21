@@ -56,11 +56,6 @@ fun LogScreen(
         false
     ) }
 
-    // Auto-open package filter bar if a saved filter was restored on launch
-    LaunchedEffect(Unit) {
-        if (uiState.savedPackageFilter.isNotEmpty()) showPackageFilter = true
-    }
-
     // Auto-scroll
     LaunchedEffect(filteredEntries.size) {
         if (uiState.autoScroll && filteredEntries.isNotEmpty()) {
@@ -236,60 +231,90 @@ fun LogScreen(
                     )
                 }
 
-                // Package filter field + save bookmark button
+                // Package filter field + saved filter chips
                 AnimatedVisibility(
                     visible = showPackageFilter,
                     enter = expandVertically(),
                     exit = shrinkVertically()
                 ) {
                     val packageFilter = uiState.filterState.packageFilter
-                    val savedFilter = uiState.savedPackageFilter
-                    val filterIsSaved = savedFilter.isNotEmpty() && savedFilter == packageFilter
+                    val savedFilters = uiState.savedFilters
+                    val alreadySaved = savedFilters.contains(packageFilter.trim())
 
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = packageFilter,
-                            onValueChange = viewModel::setPackageFilter,
-                            placeholder = { Text("Filter by package (e.g. com.example)") },
-                            leadingIcon = { Icon(Icons.Default.Apps, null, Modifier.size(18.dp)) },
-                            trailingIcon = {
-                                if (packageFilter.isNotEmpty()) {
-                                    IconButton(onClick = { viewModel.setPackageFilter("") }) {
-                                        Icon(Icons.Default.Clear, null, Modifier.size(18.dp))
-                                    }
-                                }
-                            },
-                            singleLine = true,
-                            textStyle = LocalTextStyle.current.copy(
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 13.sp
-                            ),
-                            modifier = Modifier.weight(1f)
-                        )
-                        // Bookmark: save / clear saved filter
-                        IconButton(
-                            onClick = {
-                                if (filterIsSaved) viewModel.clearSavedPackageFilter()
-                                else if (packageFilter.isNotEmpty()) viewModel.savePackageFilter()
-                            },
-                            enabled = packageFilter.isNotEmpty() || savedFilter.isNotEmpty()
+                    Column {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = if (filterIsSaved) Icons.Default.Bookmark
-                                              else Icons.Default.BookmarkBorder,
-                                contentDescription = if (filterIsSaved) "Clear saved filter"
-                                                     else "Save filter for next launch",
-                                tint = when {
-                                    filterIsSaved -> MaterialTheme.colorScheme.primary
-                                    packageFilter.isNotEmpty() -> LocalContentColor.current
-                                    else -> LocalContentColor.current.copy(alpha = 0.3f)
-                                }
+                            OutlinedTextField(
+                                value = packageFilter,
+                                onValueChange = viewModel::setPackageFilter,
+                                placeholder = { Text("Filter by package (e.g. com.example)") },
+                                leadingIcon = { Icon(Icons.Default.Apps, null, Modifier.size(18.dp)) },
+                                trailingIcon = {
+                                    if (packageFilter.isNotEmpty()) {
+                                        IconButton(onClick = { viewModel.setPackageFilter("") }) {
+                                            Icon(Icons.Default.Clear, null, Modifier.size(18.dp))
+                                        }
+                                    }
+                                },
+                                singleLine = true,
+                                textStyle = LocalTextStyle.current.copy(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 13.sp
+                                ),
+                                modifier = Modifier.weight(1f)
                             )
+                            // Save current filter to list
+                            IconButton(
+                                onClick = { viewModel.addSavedFilter() },
+                                enabled = packageFilter.trim().isNotEmpty() && !alreadySaved
+                            ) {
+                                Icon(
+                                    imageVector = if (alreadySaved) Icons.Default.Bookmark
+                                                  else Icons.Default.BookmarkBorder,
+                                    contentDescription = "Save filter",
+                                    tint = if (alreadySaved) MaterialTheme.colorScheme.primary
+                                           else if (packageFilter.trim().isNotEmpty()) LocalContentColor.current
+                                           else LocalContentColor.current.copy(alpha = 0.3f)
+                                )
+                            }
+                        }
+
+                        // Saved filter chips
+                        if (savedFilters.isNotEmpty()) {
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                items(savedFilters) { filter ->
+                                    InputChip(
+                                        selected = packageFilter == filter,
+                                        onClick = { viewModel.setPackageFilter(filter) },
+                                        label = {
+                                            Text(
+                                                text = filter,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 12.sp
+                                            )
+                                        },
+                                        trailingIcon = {
+                                            IconButton(
+                                                onClick = { viewModel.removeSavedFilter(filter) },
+                                                modifier = Modifier.size(18.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Close,
+                                                    contentDescription = "Remove saved filter",
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                            }
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }

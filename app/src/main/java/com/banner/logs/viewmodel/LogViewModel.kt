@@ -36,8 +36,8 @@ data class UiState(
     val isRunning: Boolean = false,
     val isPaused: Boolean = false,
     val filterState: FilterState = FilterState(),
-    /** The package filter value currently persisted in SharedPreferences. Empty = nothing saved. */
-    val savedPackageFilter: String = "",
+    /** Saved package filter presets. */
+    val savedFilters: List<String> = emptyList(),
     /** 0 = unlimited */
     val maxLines: Int = 0,
     val fontSize: Float = 12f,
@@ -53,7 +53,7 @@ data class UiState(
 )
 
 private const val PREFS_NAME = "simple_logcat_prefs"
-private const val KEY_SAVED_PACKAGE_FILTER = "saved_package_filter"
+private const val KEY_SAVED_FILTERS = "saved_package_filters"
 
 class LogViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -74,16 +74,10 @@ class LogViewModel(application: Application) : AndroidViewModel(application) {
     private val dirty = AtomicBoolean(false)
 
     init {
-        // Load saved package filter
-        val savedFilter = prefs.getString(KEY_SAVED_PACKAGE_FILTER, "") ?: ""
-        _uiState.update { state ->
-            state.copy(
-                savedPackageFilter = savedFilter,
-                filterState = if (savedFilter.isNotEmpty())
-                    state.filterState.copy(packageFilter = savedFilter)
-                else state.filterState
-            )
-        }
+        // Load saved package filter list
+        val raw = prefs.getString(KEY_SAVED_FILTERS, "") ?: ""
+        val savedFilters = raw.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        _uiState.update { it.copy(savedFilters = savedFilters) }
 
         startDirtyChecker()
         viewModelScope.launch(Dispatchers.IO) {
@@ -182,17 +176,26 @@ class LogViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { recomputeFiltered() }
     }
 
-    /** Persists the current package filter text to SharedPreferences. */
-    fun savePackageFilter() {
-        val current = _uiState.value.filterState.packageFilter
-        prefs.edit().putString(KEY_SAVED_PACKAGE_FILTER, current).apply()
-        _uiState.update { it.copy(savedPackageFilter = current) }
+    /** Adds the current package filter text to the saved list (no-op if blank or already saved). */
+    fun addSavedFilter() {
+        val pkg = _uiState.value.filterState.packageFilter.trim()
+        if (pkg.isEmpty()) return
+        val current = _uiState.value.savedFilters
+        if (current.contains(pkg)) return
+        val updated = current + pkg
+        persistFilters(updated)
+        _uiState.update { it.copy(savedFilters = updated) }
     }
 
-    /** Clears the persisted package filter from SharedPreferences. */
-    fun clearSavedPackageFilter() {
-        prefs.edit().remove(KEY_SAVED_PACKAGE_FILTER).apply()
-        _uiState.update { it.copy(savedPackageFilter = "") }
+    /** Removes a specific entry from the saved filter list. */
+    fun removeSavedFilter(pkg: String) {
+        val updated = _uiState.value.savedFilters.filter { it != pkg }
+        persistFilters(updated)
+        _uiState.update { it.copy(savedFilters = updated) }
+    }
+
+    private fun persistFilters(list: List<String>) {
+        prefs.edit().putString(KEY_SAVED_FILTERS, list.joinToString(",")).apply()
     }
 
     fun toggleLevel(level: LogLevel) {
