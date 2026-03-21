@@ -20,13 +20,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.banner.logs.App
 import com.banner.logs.data.LogEntry
 import com.banner.logs.data.LogLevel
 import com.banner.logs.data.color
@@ -37,7 +38,10 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LogScreen(viewModel: LogViewModel = viewModel()) {
+fun LogScreen(
+    viewModel: LogViewModel = (LocalContext.current.applicationContext as App).logViewModel
+) {
+    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val filteredEntries by viewModel.filteredEntries.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
@@ -175,6 +179,23 @@ fun LogScreen(viewModel: LogViewModel = viewModel()) {
                             enabled = uiState.totalEntries > 0
                         ) {
                             Icon(Icons.Default.SaveAlt, contentDescription = "Export logs")
+                        }
+                        // Live file toggle
+                        IconButton(onClick = { viewModel.toggleLiveFile(context) }) {
+                            Icon(
+                                imageVector = if (uiState.liveFileEnabled)
+                                    Icons.Default.FiberManualRecord
+                                else
+                                    Icons.Default.RadioButtonUnchecked,
+                                contentDescription = if (uiState.liveFileEnabled)
+                                    "Stop live file"
+                                else
+                                    "Start live file",
+                                tint = if (uiState.liveFileEnabled)
+                                    Color(0xFFEF5350)
+                                else
+                                    LocalContentColor.current
+                            )
                         }
                         // Settings
                         IconButton(onClick = { showSettings = true }) {

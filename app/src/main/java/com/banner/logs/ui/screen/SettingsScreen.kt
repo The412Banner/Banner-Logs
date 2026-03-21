@@ -7,7 +7,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material3.*
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -103,6 +107,54 @@ fun SettingsSheet(
                         }
                     )
                 }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            // --- Live File ---
+            val context = LocalContext.current
+            SectionLabel("Live File Output")
+            Text(
+                text = "Streams filtered logs to a file in real time. Keep app open or minimised — foreground service holds it alive.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (uiState.liveFileEnabled) {
+                        Icon(
+                            Icons.Default.FiberManualRecord,
+                            contentDescription = null,
+                            tint = Color(0xFFEF5350),
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    Text(
+                        text = if (uiState.liveFileEnabled) "Live — recording" else "Stopped",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (uiState.liveFileEnabled) Color(0xFFEF5350)
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = uiState.liveFileEnabled,
+                    onCheckedChange = { viewModel.toggleLiveFile(context) }
+                )
+            }
+            if (uiState.liveFileEnabled && uiState.liveFilePath.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "tail -f ${uiState.liveFilePath}",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
 
             Spacer(Modifier.height(20.dp))

@@ -2,6 +2,7 @@ package com.banner.logs.viewmodel
 
 import android.app.Application
 import android.content.Context
+import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.banner.logs.data.LogEntry
@@ -18,6 +19,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -45,7 +47,9 @@ data class UiState(
     val wrapLines: Boolean = false,
     val totalEntries: Int = 0,
     val shownEntries: Int = 0,
-    val exportMessage: String? = null
+    val exportMessage: String? = null,
+    val liveFileEnabled: Boolean = false,
+    val liveFilePath: String = ""
 )
 
 private const val PREFS_NAME = "simple_logcat_prefs"
@@ -56,9 +60,8 @@ class LogViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     private val entriesMutex = Mutex()
-    private val pidsMutex = Mutex()
     private val allEntries = ArrayDeque<LogEntry>()
-    private val pidMap = mutableMapOf<Int, String>()
+    private val pidMap = ConcurrentHashMap<Int, String>()
 
     private val _filteredEntries = MutableStateFlow<List<LogEntry>>(emptyList())
     val filteredEntries: StateFlow<List<LogEntry>> = _filteredEntries.asStateFlow()
@@ -117,6 +120,19 @@ class LogViewModel(application: Application) : AndroidViewModel(application) {
                     // max == 0 means unlimited — no trimming
                 }
                 dirty.set(true)
+
+                val state = _uiState.value
+                if (state.liveFileEnabled && state.liveFilePath.isNotEmpty()) {
+                    val pkgFilter = state.filterState.packageFilter
+                    val levelOk = entry.level in state.filterState.enabledLevels
+                    val pkgOk = pkgFilter.isEmpty() ||
+                        pidMap[entry.pid]?.contains(pkgFilter, ignoreCase = true) == true ||
+                        entry.tag.contains(pkgFilter, ignoreCase = true)
+                    if (levelOk && pkgOk) {
+                        try { File(state.liveFilePath).appendText(entry.raw + "\n") }
+                        catch (e: Exception) { /* ignore write errors */ }
+                    }
+                }
             }
         }
         pidRefreshJob = viewModelScope.launch {
@@ -194,6 +210,26 @@ class LogViewModel(application: Application) : AndroidViewModel(application) {
     fun setWrapLines(v: Boolean) { _uiState.update { it.copy(wrapLines = v) } }
     fun dismissExportMessage() { _uiState.update { it.copy(exportMessage = null) } }
 
+    fun toggleLiveFile(context: Context) {
+        val current = _uiState.value.liveFileEnabled
+        if (current) {
+            context.stopService(Intent(context, com.banner.logs.LogcatService::class.java))
+            _uiState.update { it.copy(liveFileEnabled = false, liveFilePath = "") }
+        } else {
+            val file = context.getExternalFilesDir(null)?.resolve("simple-logcat-live.log") ?: return
+            file.parentFile?.mkdirs()
+            file.writeText("") // clear on each start
+            val path = file.absolutePath
+            val pkg = _uiState.value.filterState.packageFilter
+            val intent = Intent(context, com.banner.logs.LogcatService::class.java).apply {
+                putExtra(com.banner.logs.LogcatService.EXTRA_FILE_PATH, path)
+                putExtra(com.banner.logs.LogcatService.EXTRA_PACKAGE, pkg)
+            }
+            context.startForegroundService(intent)
+            _uiState.update { it.copy(liveFileEnabled = true, liveFilePath = path) }
+        }
+    }
+
     fun exportLogs() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -222,18 +258,14 @@ class LogViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun refreshPidMap() {
         val map = LogcatReader.getPidMap()
-        viewModelScope.launch {
-            pidsMutex.withLock {
-                pidMap.clear()
-                pidMap.putAll(map)
-            }
-        }
+        pidMap.clear()
+        pidMap.putAll(map)
     }
 
     private suspend fun recomputeFiltered() {
         val filter = _uiState.value.filterState
         val snapshot = entriesMutex.withLock { allEntries.toList() }
-        val pids = pidsMutex.withLock { pidMap.toMap() }
+        val pids = pidMap.toMap()
 
         val filtered = if (filter.searchText.isEmpty() &&
             filter.packageFilter.isEmpty() &&
